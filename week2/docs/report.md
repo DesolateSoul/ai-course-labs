@@ -81,7 +81,6 @@
 - доступности операторов
 
 **Листинг кода (`src/tools/custom_tool.py`):**
-# -*- coding: utf-8 -*-
 """
 Специализированный инструмент для дипломной работы
 Лабораторная работа №2
@@ -212,7 +211,8 @@ print(result)
 \<img width="758" height="295" alt="image" src="https://github.com/user-attachments/assets/03fc18a1-08d3-4141-8804-bb45e5a7011b" />
 
 
-\[Скриншоты работы]
+\<img width="1800" height="531" alt="image" src="https://github.com/user-attachments/assets/1706dbe5-49d2-4003-8e4f-841cd4752aa9" />
+
 
 \### 3.5. Интеграция с дипломом
 
