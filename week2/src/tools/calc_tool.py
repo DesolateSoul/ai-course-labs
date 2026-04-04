@@ -1,111 +1,80 @@
 # -*- coding: utf-8 -*-
 """
-Инструмент математических вычислений
+Инструмент поиска в интернете
 Лабораторная работа №2
 """
 from langchain.tools import BaseTool
-from typing import Type
+from typing import Type, Optional
 from pydantic import BaseModel, Field
-import ast
-import operator
 import logging
+
 logger = logging.getLogger(__name__)
-class CalculateInput(BaseModel):
- """Схема входных параметров для вычислений."""
- expression: str = Field(
- description="Математическое выражение (например: 2+2*3)",
- min_length=1,
- max_length=200
- )
- precision: int = Field(
- description="Точность результата (знаков после запятой)",
- default=2,
- ge=0,
- le=10
- )
-class SafeCalculator:
- """
- Безопасный калькулятор без eval().
 
- Поддерживаемые операции: +, -, *, /, **, унарный минус
- """
 
- OPERATORS = {
- ast.Add: operator.add,
- ast.Sub: operator.sub,
- ast.Mult: operator.mul,
-ast.Div: operator.truediv,
- ast.Pow: operator.pow,
- ast.USub: operator.neg,
- }
+class SearchInput(BaseModel):
+    """Схема входных параметров для поиска."""
+    query: str = Field(
+        description="Поисковый запрос",
+        min_length=1,
+        max_length=500
+    )
+    num_results: int = Field(
+        description="Количество результатов (1-10)",
+        default=5,
+        ge=1,
+        le=10
+    )
 
- def eval_expr(self, expr: str) -> float:
- """
- Безопасное вычисление выражения.
 
- Args:
- expr: Математическое выражение
+class SearchTool(BaseTool):
+    """
+    Инструмент для поиска информации в интернете.
 
- Returns:
- float: Результат вычисления
+    Назначение:
+    Получение актуальной информации из открытых источников.
 
- Raises:
- ValueError: При недопустимой операции
- """
- try:
- node = ast.parse(expr, mode='eval').body
- return self._eval_node(node)
- except Exception as e:
- raise ValueError(f"Ошибка вычисления: {e}")
+    Ограничения:
+    • Учебная версия использует mock-данные
+    • В production подключить Yandex Search API или аналог
+    """
 
- def _eval_node(self, node) -> float:
- if isinstance(node, ast.Constant): # Python >= 3.8
- return node.value
- elif isinstance(node, ast.Num): # Python < 3.8
- return node.n
- elif isinstance(node, ast.BinOp):
- left = self._eval_node(node.left)
- right = self._eval_node(node.right)
- return self.OPERATORS[type(node.op)](left, right)
- elif isinstance(node, ast.UnaryOp):
- operand = self._eval_node(node.operand)
- return self.OPERATORS[type(node.op)](operand)
- else:
- raise ValueError(f"Неподдерживаемая операция: {type(node)}")
-class CalculateTool(BaseTool):
- """Инструмент для безопасных математических вычислений."""
+    name = "search_web"
+    description = """
+    Поиск актуальной информации в интернете по запросу.
+    Используйте для получения свежих данных, новостей, документации.
+    Возвращает до 10 результатов поиска с описанием.
+    """
+    args_schema: Type[BaseModel] = SearchInput
 
- name = "calculate"
- description = """
- Выполнение математических вычислений.
- Используйте для расчётов, формул, статистики.
- Поддерживает: +, -, *, /, **, скобки.
- """
- args_schema: Type[BaseModel] = CalculateInput
+    def _run(self, query: str, num_results: int = 5) -> str:
+        """
+        Выполнение поиска.
 
- calculator = SafeCalculator()
+        Args:
+            query: Поисковый запрос
+            num_results: Количество результатов
 
- def _run(self, expression: str, precision: int = 2) -> str:
- """
- Выполнение вычислений.
+        Returns:
+            str: Форматированные результаты поиска
+        """
+        logger.info(f"Поиск: {query} (результатов: {num_results})")
 
- Args:
- expression: Математическое выражение
- precision: Точность результата
+        # Учебная реализация (mock)
+        # В production: подключить Yandex Search API
+        results = []
+        for i in range(num_results):
+            results.append(f"Результат {i+1}: Информация по запросу '{query}'")
+            results.append(f"Источник: Открытые данные")
+            results.append(f"Актуальность: 2026")
+            results.append("---")
 
- Returns:
- str: Результат вычислений
- """
- logger.info(f"Вычисление: {expression}")
+        formatted = "\n".join(results)
+        return f"Поиск по запросу: {query}\n\n{formatted}"
 
- try:
- result = self.calculator.eval_expr(expression)
- return f"{expression} = {result:.{precision}f}"
- except Exception as e:
- return f"Ошибка вычисления: {e}"
+    async def _arun(self, query: str, num_results: int = 5) -> str:
+        """Асинхронная версия."""
+        return self._run(query, num_results)
 
- async def _arun(self, expression: str, precision: int = 2) -> str:
- return self._run(expression, precision)
-
- def to_langchain_tool(self) -> BaseTool:
- return self
+    def to_langchain_tool(self) -> BaseTool:
+        """Конвертация в формат LangChain."""
+        return self
