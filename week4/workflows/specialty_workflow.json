@@ -1,0 +1,165 @@
+{
+  "name": "Специализированный workflow для Математического обеспечения и администрирования ИС",
+  "description": "Интеллектуальная маршрутизация вызовов виртуальной АТС на основе анализа запроса пользователя с использованием LLM. Определяет категорию обращения (техподдержка, продажи, рекламация, общие вопросы) и назначает приоритет обработки",
+  "author": "Громов",
+  "diploma_topic": "Интеллектуальный модуль для виртуальной АТС",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ats-intelligent-routing",
+        "responseMode": "lastNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Webhook Trigger ATS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.YANDEX_IAM_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "modelUri",
+              "value": "gpt://{{ $env.YANDEX_FOLDER_ID }}/yandexGPT/latest"
+            },
+            {
+              "name": "completionOptions",
+              "value": "{\"temperature\":0.3,\"maxTokens\":200}"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\":\"system\",\"text\":\"Ты интеллектуальный модуль маршрутизации виртуальной АТС. Твоя задача: проанализировать текст запроса абонента и вернуть JSON с параметрами маршрутизации. Формат ответа строго: {\\\"category\\\": \\\"[tech/sales/complaint/general]\\\", \\\"priority\\\": [1-5], \\\"estimated_duration\\\": [в секундах], \\\"required_skill\\\": \\\"[skill_name]\\\", \\\"response_text\\\": \\\"[короткий ответ абоненту]\\\"}. Категории: tech - техническая поддержка (сбои, ошибки, настройка), sales - продажи (подключение услуг, тарифы), complaint - рекламация (качество связи, списания), general - общие вопросы. Приоритет: 5 - самый высокий (критические сбои), 1 - низкий (информационные запросы).\"},{\"role\":\"user\",\"text\":\"{{ JSON.parse($json.body).caller_input }}\"}]"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "YandexGPT Router",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ats-internal-api:8080/api/v1/routing/decide",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "session_id",
+              "value": "={{ $json.session_id }}"
+            },
+            {
+              "name": "caller_phone",
+              "value": "={{ $json.caller_phone }}"
+            },
+            {
+              "name": "llm_decision",
+              "value": "={{ $json.llm_decision }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ Date.now() }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "name": "ATS Routing API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "fieldsToCombine": {
+          "fields": {
+            "values": [
+              {
+                "fieldName": "status",
+                "value": "routed"
+              },
+              {
+                "fieldName": "assigned_operator",
+                "value": "={{ $node['ATS Routing API'].json.operator_id }}"
+              },
+              {
+                "fieldName": "routing_decision",
+                "value": "={{ $node['YandexGPT Router'].json.alternatives[0].message.text }}"
+              },
+              {
+                "fieldName": "processing_time_ms",
+                "value": "={{ Date.now() - $node['Webhook Trigger ATS'].json.timestamp }}"
+              }
+            ]
+          }
+        },
+        "options": {
+          "includeRawData": false
+        }
+      },
+      "name": "Response Formatter",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger ATS": {
+      "main": [[{"node": "YandexGPT Router", "type": "main", "index": 0}]]
+    },
+    "YandexGPT Router": {
+      "main": [[{"node": "ATS Routing API", "type": "main", "index": 0}]]
+    },
+    "ATS Routing API": {
+      "main": [[{"node": "Response Formatter", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}
